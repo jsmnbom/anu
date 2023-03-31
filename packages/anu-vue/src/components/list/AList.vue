@@ -1,13 +1,14 @@
 <script lang="ts" setup>
 import type { ExtractPropTypes } from 'vue'
+import { toRef } from 'vue'
 import type { ListPropItems } from './props'
 import { listProps } from './props'
 import type { listSlots } from './slots'
 import { listItemSlotsPrefix } from './slots'
-import { isObject, prefixObjectKeysWithMeta } from '@/utils/helpers'
-import { useGroupModel } from '@/composables'
+import { prefixObjectKeysWithMeta } from '@/utils/helpers'
 import { listItemSlots as listItemComponentSlots } from '@/components/list-item/slots'
 import { AListItem } from '@/components/list-item'
+import { useGroupModel2 } from '@/composables'
 
 const props = defineProps(listProps)
 
@@ -24,17 +25,22 @@ defineOptions({
 
 defineSlots<typeof listSlots>()
 
-const extractItemValueFromItemOption = (item: ListPropItems[number]) => isObject(item) ? (item.value || item) : item
+const { options, select, value } = useGroupModel2({
+  value: toRef(props, 'modelValue'),
+  options: toRef(props, 'items'),
+  multi: toRef(props, 'multi'),
+  extractValue: (item: ListPropItems[number]) => {
+    if (typeof item === 'string' || typeof item === 'number')
+      return item
 
-const { options, select: selectListItem, value } = useGroupModel({
-  options: props.items.map(i => extractItemValueFromItemOption(i)),
-  multi: props.multi,
+    return item.value
+  },
 })
 
-// const isActive = computed(() => options.value[itemIndex].isSelected)
-const handleListItemClick = (item: ListPropItems[number]) => {
-  selectListItem(extractItemValueFromItemOption(item))
+const handleListItemClick = (index: number) => {
+  select(options.value[index])
   emit('update:modelValue', value.value)
+  const item = props.items[index]
   emit('click:item', {
     value: value.value,
     item,
@@ -54,22 +60,17 @@ const listItemPrefixedSlots = prefixObjectKeysWithMeta(listItemComponentSlots, l
     <!-- 👉 Slot: default -->
     <slot :handle-list-item-click="handleListItemClick">
       <AListItem
-        v-for="(item, index) in props.items"
+        v-for="(option, index) in options"
         :key="index"
-        :text="typeof item === 'string' || typeof item === 'number' ? item : undefined"
-        v-bind="typeof item === 'string' ? {} : item"
+        :text="typeof option === 'string' || typeof option === 'number' ? option : undefined"
+        v-bind="typeof option === 'string' ? {} : option"
         :avatar-append="props.avatarAppend"
         :icon-append="props.iconAppend"
         :color="props.color"
         :variant="props.variant"
         :states="props.states"
-        :is-active="options[index]?.isSelected as unknown as boolean"
-        :value="props.modelValue !== undefined ? options[index] : undefined"
-        v-on="{
-          click: props['onClick:item'] || (props.modelValue !== undefined)
-            ? () => handleListItemClick(item)
-            : null,
-        }"
+        :is-active="option.isSelected as unknown as boolean"
+        @click="handleListItemClick(index)"
       >
         <!-- ℹ️ Recursively pass down slots to child -->
         <template
